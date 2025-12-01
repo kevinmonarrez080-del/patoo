@@ -1,0 +1,180 @@
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Dude Game - Multijugador</title>
+<script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+<style>
+    body { margin: 0; }
+    canvas { display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+var config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    physics: { default:'arcade', arcade:{ gravity:{y:300}, debug:false } },
+    scene: [ MenuScene, PlayerSelectScene, DifficultyScene, GameScene ]
+};
+
+var game = new Phaser.Game(config);
+var difficulty = 'medium';
+var multiplayer = true; // true = 2 jugadores, false = 1 jugador
+
+// ================= MENU =================
+function MenuScene() { Phaser.Scene.call(this, { key:'MenuScene' }); }
+MenuScene.prototype = Object.create(Phaser.Scene.prototype);
+MenuScene.prototype.constructor = MenuScene;
+MenuScene.prototype.preload = function(){ this.load.image('sky','sky.png'); };
+MenuScene.prototype.create = function(){
+    this.add.image(400,300,'sky');
+    this.add.text(200,100,'DUDE GAME',{fontSize:'70px',fill:'#fff'});
+    let startBtn = this.add.text(250,300,'JUGAR',{fontSize:'50px',fill:'#ff0',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive()
+        .on('pointerdown',()=>{ this.scene.start('PlayerSelectScene'); })
+        .on('pointerover',()=>startBtn.setStyle({fill:'#0f0'}))
+        .on('pointerout',()=>startBtn.setStyle({fill:'#ff0'}));
+};
+
+// ============== SELECCIÓN DE JUGADORES ==============
+function PlayerSelectScene() { Phaser.Scene.call(this, { key:'PlayerSelectScene' }); }
+PlayerSelectScene.prototype = Object.create(Phaser.Scene.prototype);
+PlayerSelectScene.prototype.constructor = PlayerSelectScene;
+PlayerSelectScene.prototype.create = function(){
+    this.add.text(200,100,'SELECCIONA MODO',{fontSize:'50px',fill:'#fff'});
+    let oneBtn = this.add.text(300,200,'1 JUGADOR',{fontSize:'40px',fill:'#0f0',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive().on('pointerdown',()=>{ multiplayer=false; this.scene.start('DifficultyScene'); });
+    let twoBtn = this.add.text(300,300,'2 JUGADORES',{fontSize:'40px',fill:'#ff0',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive().on('pointerdown',()=>{ multiplayer=true; this.scene.start('DifficultyScene'); });
+};
+
+// ============== DIFICULTAD ==============
+function DifficultyScene() { Phaser.Scene.call(this,{key:'DifficultyScene'}); }
+DifficultyScene.prototype = Object.create(Phaser.Scene.prototype);
+DifficultyScene.prototype.constructor = DifficultyScene;
+DifficultyScene.prototype.create = function(){
+    this.add.text(200,100,'ELIGE DIFICULTAD',{fontSize:'50px',fill:'#fff'});
+    let easyBtn = this.add.text(300,200,'FÁCIL',{fontSize:'40px',fill:'#0f0',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive().on('pointerdown',()=>{difficulty='easy';this.scene.start('GameScene');});
+    let mediumBtn = this.add.text(300,300,'MEDIO',{fontSize:'40px',fill:'#ff0',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive().on('pointerdown',()=>{difficulty='medium';this.scene.start('GameScene');});
+    let hardBtn = this.add.text(300,400,'DIFÍCIL',{fontSize:'40px',fill:'#f00',backgroundColor:'#000',padding:{x:20,y:10}})
+        .setInteractive().on('pointerdown',()=>{difficulty='hard';this.scene.start('GameScene');});
+};
+
+// ================== JUEGO ==================
+function GameScene() { Phaser.Scene.call(this,{key:'GameScene'}); }
+GameScene.prototype = Object.create(Phaser.Scene.prototype);
+GameScene.prototype.constructor = GameScene;
+
+var player1, player2, stars, bombs, platforms;
+var cursors1, cursors2, score1=0, score2=0, gameOver=false;
+var scoreText1, scoreText2;
+
+GameScene.prototype.preload = function(){
+    this.load.image('sky','sky.png');
+    this.load.image('ground','platform.png');
+    this.load.image('star','star.png');
+    this.load.image('bomb','bomb.png');
+    this.load.spritesheet('dude','dude.png',{frameWidth:32,frameHeight:48});
+};
+
+GameScene.prototype.create = function(){
+    score1=0; score2=0; gameOver=false;
+    this.add.image(400,300,'sky');
+
+    platforms = this.physics.add.staticGroup();
+    platforms.create(400,568,'ground').setScale(2).refreshBody();
+    platforms.create(600,400,'ground'); platforms.create(50,250,'ground'); platforms.create(750,220,'ground');
+
+    let playerSpeed=160, jumpSpeed=-330, gravity=300, bombSpeedRange=200, starCount=11;
+    if(difficulty=='easy'){bombSpeedRange=100;starCount=8;gravity=250;}
+    if(difficulty=='medium'){bombSpeedRange=200;starCount=11;gravity=300;}
+    if(difficulty=='hard'){bombSpeedRange=300;starCount=14;gravity=400;}
+    this.physics.world.gravity.y = gravity;
+
+    // Crear jugador1
+    player1 = this.physics.add.sprite(100,450,'dude').setScale(2);
+    player1.setBounce(0.2); player1.setCollideWorldBounds(true);
+
+    // Crear jugador2 solo si multiplayer
+    if(multiplayer){
+        player2 = this.physics.add.sprite(700,450,'dude').setScale(2);
+        player2.setBounce(0.2); player2.setCollideWorldBounds(true);
+    } else {
+        player2 = null;
+    }
+
+    this.anims.create({key:'left',frames:this.anims.generateFrameNumbers('dude',{start:0,end:1}),frameRate:10,repeat:-1});
+    this.anims.create({key:'turn',frames:[{key:'dude',frame:2}],frameRate:20});
+    this.anims.create({key:'right',frames:this.anims.generateFrameNumbers('dude',{start:3,end:4}),frameRate:10,repeat:-1});
+
+    cursors1 = this.input.keyboard.createCursorKeys();
+    if(multiplayer){
+        cursors2 = this.input.keyboard.addKeys({up:'W',left:'A',right:'D',down:'S'});
+    }
+
+    stars = this.physics.add.group({key:'star',repeat:starCount-1,setXY:{x:12,y:0,stepX:70}});
+    stars.children.iterate(c=>{c.setBounceY(Phaser.Math.FloatBetween(0.4,0.8));});
+    bombs = this.physics.add.group();
+
+    scoreText1 = this.add.text(16,16,'P1:0',{fontSize:'32px',fill:'#000'});
+    if(multiplayer) scoreText2 = this.add.text(600,16,'P2:0',{fontSize:'32px',fill:'#000'});
+
+    this.physics.add.collider(player1,platforms);
+    if(multiplayer) this.physics.add.collider(player2,platforms);
+    this.physics.add.collider(stars,platforms);
+    this.physics.add.collider(bombs,platforms);
+
+    this.physics.add.overlap(player1,stars,(p,s)=>collectStar(p,s,bombSpeedRange),'',this);
+    if(multiplayer) this.physics.add.overlap(player2,stars,(p,s)=>collectStar(p,s,bombSpeedRange),'',this);
+
+    this.physics.add.collider(player1,bombs,(p,b)=>hitBomb.call(this,p,b));
+    if(multiplayer) this.physics.add.collider(player2,bombs,(p,b)=>hitBomb.call(this,p,b));
+
+    this.playerSpeed=playerSpeed; this.jumpSpeed=jumpSpeed; this.bombSpeedRange=bombSpeedRange;
+};
+
+GameScene.prototype.update = function(){
+    if(gameOver) return;
+
+    // Jugador1
+    if(cursors1.left.isDown){player1.setVelocityX(-this.playerSpeed);player1.anims.play('left',true);}
+    else if(cursors1.right.isDown){player1.setVelocityX(this.playerSpeed);player1.anims.play('right',true);}
+    else{player1.setVelocityX(0);player1.anims.play('turn');}
+    if(cursors1.up.isDown && player1.body.touching.down){player1.setVelocityY(this.jumpSpeed);}
+
+    // Jugador2
+    if(multiplayer && player2){
+        if(cursors2.left.isDown){player2.setVelocityX(-this.playerSpeed);player2.anims.play('left',true);}
+        else if(cursors2.right.isDown){player2.setVelocityX(this.playerSpeed);player2.anims.play('right',true);}
+        else{player2.setVelocityX(0);player2.anims.play('turn');}
+        if(cursors2.up.isDown && player2.body.touching.down){player2.setVelocityY(this.jumpSpeed);}
+    }
+};
+
+function collectStar(player, star, bombSpeedRange){
+    star.disableBody(true,true);
+    if(player===player1){score1+=10;scoreText1.setText('P1:'+score1);}
+    else{score2+=10;scoreText2.setText('P2:'+score2);}
+
+    if(stars.countActive(true)===0){
+        stars.children.iterate(c=>c.enableBody(true,c.x,0,true,true));
+        var x = (player.x<400)?Phaser.Math.Between(400,800):Phaser.Math.Between(0,400);
+        var bomb=bombs.create(x,16,'bomb'); bomb.setBounce(1); bomb.setCollideWorldBounds(true);
+        bomb.setVelocity(Phaser.Math.Between(-bombSpeedRange,bombSpeedRange),20); bomb.allowGravity=false;
+    }
+}
+
+function hitBomb(player,bomb){
+    this.physics.pause(); player.setTint(0xff0000); player.anims.play('turn'); gameOver=true;
+    this.add.text(150,300,'GAME OVER\nClick para volver al menú',{fontSize:'40px',fill:'#000'});
+    this.input.once('pointerdown',()=>{ this.scene.start('MenuScene'); });
+}
+
+</script>
+</body>
+</html>
